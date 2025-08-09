@@ -143,6 +143,36 @@
         .debug-canvas {
             border-color: #ff6b6b !important;
         }
+
+        .download-section {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .download-button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .download-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .download-button:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -188,6 +218,15 @@
             </div>
         </div>
 
+        <div class="download-section">
+            <button class="download-button" onclick="app.downloadSVG('perfect')">
+                完璧配置をSVGでダウンロード
+            </button>
+            <button class="download-button" onclick="app.downloadSVG('debug')">
+                デバッグビューをSVGでダウンロード
+            </button>
+        </div>
+
         <div class="info-panel">
             <div class="info-title">テキスト測定データ</div>
             <div class="metrics" id="metrics"></div>
@@ -195,6 +234,29 @@
     </div>
 
     <script>
+        /* 
+         * 画像作成アルゴリズムの評価
+         * 
+         * 【アプローチ】
+         * Canvas APIのmeasureText()とactualBoundingBoxを使用した精密なテキスト中央配置
+         * 
+         * 【メリット】
+         * - 数学的に正確な中央配置を実現
+         * - 日本語を含む多言語に対応
+         * - リアルタイムプレビュー機能
+         * - フォントサイズ・種類の動的変更が可能
+         * - デバッグビューによる視覚的検証
+         * 
+         * 【デメリット】
+         * - 実装が複雑で理解・保守が困難
+         * - 一般ユーザーには不要な詳細情報が多い
+         * - コード量が多く、シンプルな用途には過剰
+         * - ブラウザ間でのmeasureText精度の差異リスク
+         * 
+         * 【結論】
+         * アプローチ自体は技術的に優秀だが、実用性を考慮し
+         * 不要な機能を削除してシンプル化することを推奨
+         */
         class PerfectTextCentering {
             constructor() {
                 this.perfectCanvas = document.getElementById('perfectCanvas');
@@ -231,21 +293,20 @@
                 // 基本的な測定値を取得
                 const metrics = ctx.measureText(text);
                 
-                // 外接矩形の寸法を計算
-                const width = metrics.width;
-                const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-                
                 // より正確な高さ測定のため、フォントサイズも考慮
                 const fontSizeMatch = font.match(/(\d+)px/);
                 const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
                 
+                // 正確な外接四角形を取得（ピクセル単位での測定）
+                const preciseBounds = this.getPixelPerfectBounds(ctx, text, font);
+                
                 return {
-                    width: width,
-                    height: height,
-                    actualBoundingBoxLeft: metrics.actualBoundingBoxLeft || 0,
-                    actualBoundingBoxRight: metrics.actualBoundingBoxRight || width,
-                    actualBoundingBoxAscent: metrics.actualBoundingBoxAscent || fontSize * 0.8,
-                    actualBoundingBoxDescent: metrics.actualBoundingBoxDescent || fontSize * 0.2,
+                    width: preciseBounds.width,
+                    height: preciseBounds.height,
+                    actualBoundingBoxLeft: preciseBounds.left,
+                    actualBoundingBoxRight: preciseBounds.right,
+                    actualBoundingBoxAscent: preciseBounds.ascent,
+                    actualBoundingBoxDescent: preciseBounds.descent,
                     fontBoundingBoxAscent: metrics.fontBoundingBoxAscent || fontSize,
                     fontBoundingBoxDescent: metrics.fontBoundingBoxDescent || fontSize * 0.25,
                     emHeightAscent: metrics.emHeightAscent || fontSize * 0.8,
@@ -256,10 +317,103 @@
                 };
             }
 
+            /**
+             * ピクセル単位で正確な文字の外接四角形を計算
+             * 実際に描画された文字のピクセルを分析して、正確な境界を取得
+             * measureText()の結果と比較して、より適切な値を選択
+             */
+            getPixelPerfectBounds(ctx, text, font) {
+                // まず従来のmeasureText()で基本測定値を取得
+                const originalMetrics = ctx.measureText(text);
+                const fontSizeMatch = font.match(/(\d+)px/);
+                const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
+                
+                // 一時キャンバスを作成してテキストを描画
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // より余裕を持ったサイズでキャンバスを作成
+                const canvasWidth = Math.max(originalMetrics.width * 2, fontSize * text.length * 3);
+                const canvasHeight = fontSize * 4;
+                tempCanvas.width = canvasWidth;
+                tempCanvas.height = canvasHeight;
+                
+                // テキストを描画
+                tempCtx.font = font;
+                tempCtx.fillStyle = 'black';
+                tempCtx.textBaseline = 'alphabetic';
+                tempCtx.textAlign = 'left';
+                
+                // ベースライン位置を計算（キャンバスの2/3の位置）
+                const baselineY = Math.floor(canvasHeight * 2 / 3);
+                const startX = Math.floor(canvasWidth / 4); // 左側に十分な余白
+                
+                tempCtx.fillText(text, startX, baselineY);
+                
+                // ピクセルデータを取得
+                const imageData = tempCtx.getImageData(0, 0, canvasWidth, canvasHeight);
+                const pixels = imageData.data;
+                
+                // 文字のピクセルが存在する境界を検出
+                let minX = canvasWidth, maxX = -1;
+                let minY = canvasHeight, maxY = -1;
+                
+                for (let y = 0; y < canvasHeight; y++) {
+                    for (let x = 0; x < canvasWidth; x++) {
+                        const index = (y * canvasWidth + x) * 4;
+                        // アルファ値をチェック（透明でない = 文字のピクセル）
+                        if (pixels[index + 3] > 10) { // わずかなアンチエイリアスも含める
+                            minX = Math.min(minX, x);
+                            maxX = Math.max(maxX, x);
+                            minY = Math.min(minY, y);
+                            maxY = Math.max(maxY, y);
+                        }
+                    }
+                }
+                
+                // 文字が検出されなかった場合のフォールバック
+                if (maxX === -1) {
+                    return {
+                        left: originalMetrics.actualBoundingBoxLeft || 0,
+                        right: originalMetrics.actualBoundingBoxRight || originalMetrics.width,
+                        width: originalMetrics.width,
+                        ascent: originalMetrics.actualBoundingBoxAscent || fontSize * 0.8,
+                        descent: originalMetrics.actualBoundingBoxDescent || fontSize * 0.2,
+                        height: (originalMetrics.actualBoundingBoxAscent || fontSize * 0.8) + (originalMetrics.actualBoundingBoxDescent || fontSize * 0.2)
+                    };
+                }
+                
+                // 検出された境界をベースライン基準の座標系に変換
+                const pixelLeft = minX - startX;
+                const pixelRight = maxX - startX;
+                const pixelWidth = maxX - minX + 1;
+                const pixelAscent = baselineY - minY;
+                const pixelDescent = maxY - baselineY;
+                const pixelHeight = maxY - minY + 1;
+                
+                // measureText()の結果と比較して、より適切な値を選択
+                // 幅については、measureText()の方が大きい場合はそれを使用（文字が切れるのを防ぐため）
+                const safeLeft = Math.min(pixelLeft, originalMetrics.actualBoundingBoxLeft || 0);
+                const safeRight = Math.max(pixelRight, originalMetrics.actualBoundingBoxRight || originalMetrics.width);
+                const safeWidth = Math.max(pixelWidth, originalMetrics.width);
+                const safeAscent = Math.max(pixelAscent, originalMetrics.actualBoundingBoxAscent || fontSize * 0.8);
+                const safeDescent = Math.max(pixelDescent, originalMetrics.actualBoundingBoxDescent || fontSize * 0.2);
+                const safeHeight = Math.max(pixelHeight, safeAscent + safeDescent);
+                
+                return {
+                    left: safeLeft,
+                    right: safeRight,
+                    width: safeWidth,
+                    ascent: safeAscent,
+                    descent: safeDescent,
+                    height: safeHeight
+                };
+            }
+
             calculatePerfectCenter(canvasSize, textMetrics) {
                 // 外接矩形の中心点を計算
                 const boundingBoxCenterX = (textMetrics.actualBoundingBoxRight - textMetrics.actualBoundingBoxLeft) / 2;
-                const boundingBoxCenterY = (textMetrics.actualBoundingBoxAscent - textMetrics.actualBoundingBoxDescent) / 2;
+                const boundingBoxCenterY = (textMetrics.actualBoundingBoxAscent + textMetrics.actualBoundingBoxDescent) / 2;
                 
                 // キャンバスの中心からテキストの描画位置を計算
                 const x = canvasSize / 2 + textMetrics.actualBoundingBoxLeft - boundingBoxCenterX;
@@ -400,71 +554,97 @@
                 this.updateMetrics(textMetrics, position, canvasSize);
             }
 
-            // TypeScriptでエクスポート用のメソッド
-            exportTypeScriptCode() {
-                return `
-interface TextMetrics {
-    width: number;
-    height: number;
-    actualBoundingBoxLeft: number;
-    actualBoundingBoxRight: number;
-    actualBoundingBoxAscent: number;
-    actualBoundingBoxDescent: number;
-}
-
-interface Position {
-    x: number;
-    y: number;
-}
-
-class PerfectTextCentering {
-    private measureTextPrecisely(ctx: CanvasRenderingContext2D, text: string, font: string): TextMetrics {
-        ctx.font = font;
-        const metrics = ctx.measureText(text);
-        
-        const width = metrics.width;
-        const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-        
-        return {
-            width: width,
-            height: height,
-            actualBoundingBoxLeft: metrics.actualBoundingBoxLeft || 0,
-            actualBoundingBoxRight: metrics.actualBoundingBoxRight || width,
-            actualBoundingBoxAscent: metrics.actualBoundingBoxAscent || 0,
-            actualBoundingBoxDescent: metrics.actualBoundingBoxDescent || 0
-        };
-    }
-
-    private calculatePerfectCenter(canvasSize: number, textMetrics: TextMetrics): Position {
-        const boundingBoxCenterX = (textMetrics.actualBoundingBoxRight - textMetrics.actualBoundingBoxLeft) / 2;
-        const boundingBoxCenterY = (textMetrics.actualBoundingBoxAscent - textMetrics.actualBoundingBoxDescent) / 2;
-        
-        const x = canvasSize / 2 + textMetrics.actualBoundingBoxLeft - boundingBoxCenterX;
-        const y = canvasSize / 2 + textMetrics.actualBoundingBoxAscent - boundingBoxCenterY;
-        
-        return { x, y };
-    }
-
-    public drawCenteredText(ctx: CanvasRenderingContext2D, text: string, font: string, canvasSize: number): void {
-        const textMetrics = this.measureTextPrecisely(ctx, text, font);
-        const position = this.calculatePerfectCenter(canvasSize, textMetrics);
-        
-        ctx.font = font;
-        ctx.textBaseline = 'alphabetic';
-        ctx.textAlign = 'left';
-        ctx.fillText(text, position.x, position.y);
-    }
-}
-                `;
+            downloadSVG(canvasType) {
+                const canvas = canvasType === 'perfect' ? this.perfectCanvas : this.debugCanvas;
+                const { text, fontSize, fontFamily, canvasSize } = this.getInputValues();
+                const font = `${fontSize}px ${fontFamily}`;
+                const textMetrics = this.measureTextPrecisely(canvas.getContext('2d'), text, font);
+                const position = this.calculatePerfectCenter(canvasSize, textMetrics);
+                
+                // 現在の日時を取得してファイル名に使用
+                const now = new Date();
+                const timestamp = now.toISOString().slice(0, 19).replace(/[:]/g, '-');
+                const filename = `text-centering-${canvasType}-${timestamp}.svg`;
+                
+                let svgContent;
+                
+                if (canvasType === 'perfect') {
+                    // 完璧中央配置のSVGを生成
+                    svgContent = `<svg width="${canvasSize}" height="${canvasSize}" xmlns="http://www.w3.org/2000/svg">
+                        <!-- 背景 -->
+                        <rect width="100%" height="100%" fill="#ffffff"/>
+                        
+                        <!-- テキスト -->
+                        <text x="${position.x}" y="${position.y}" 
+                              font-family="${fontFamily}" 
+                              font-size="${fontSize}" 
+                              fill="#333333" 
+                              text-anchor="start" 
+                              dominant-baseline="alphabetic">${text}</text>
+                    </svg>`;
+                } else {
+                    // デバッグビューのSVGを生成
+                    const centerX = canvasSize / 2;
+                    const centerY = canvasSize / 2;
+                    const left = position.x - textMetrics.actualBoundingBoxLeft;
+                    const top = position.y - textMetrics.actualBoundingBoxAscent;
+                    const width = textMetrics.actualBoundingBoxRight - textMetrics.actualBoundingBoxLeft;
+                    const height = textMetrics.actualBoundingBoxAscent + textMetrics.actualBoundingBoxDescent;
+                    const rectCenterX = left + width / 2;
+                    const rectCenterY = top + height / 2;
+                    
+                    svgContent = `<svg width="${canvasSize}" height="${canvasSize}" xmlns="http://www.w3.org/2000/svg">
+                        <!-- 背景 -->
+                        <rect width="100%" height="100%" fill="#f8f9fa"/>
+                        
+                        <!-- 中心線（破線） -->
+                        <line x1="${centerX}" y1="0" x2="${centerX}" y2="${canvasSize}" 
+                              stroke="#007bff" stroke-width="2" stroke-dasharray="5,5"/>
+                        <line x1="0" y1="${centerY}" x2="${canvasSize}" y2="${centerY}" 
+                              stroke="#007bff" stroke-width="2" stroke-dasharray="5,5"/>
+                        
+                        <!-- テキスト -->
+                        <text x="${position.x}" y="${position.y}" 
+                              font-family="${fontFamily}" 
+                              font-size="${fontSize}" 
+                              fill="#333333" 
+                              text-anchor="start" 
+                              dominant-baseline="alphabetic">${text}</text>
+                        
+                        <!-- 外接矩形 -->
+                        <rect x="${left}" y="${top}" width="${width}" height="${height}" 
+                              fill="none" stroke="#dc3545" stroke-width="2"/>
+                        
+                        <!-- ベースライン -->
+                        <line x1="${position.x - textMetrics.actualBoundingBoxLeft - 10}" y1="${position.y}" 
+                              x2="${position.x + textMetrics.actualBoundingBoxRight + 10}" y2="${position.y}" 
+                              stroke="#28a745" stroke-width="1"/>
+                        
+                        <!-- 外接矩形の中心点 -->
+                        <circle cx="${rectCenterX}" cy="${rectCenterY}" r="4" fill="#ff6b6b"/>
+                        
+                        <!-- キャンバスの中心点 -->
+                        <circle cx="${centerX}" cy="${centerY}" r="4" fill="#007bff"/>
+                    </svg>`;
+                }
+                
+                // SVGをダウンロード
+                const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                // メモリ解放
+                URL.revokeObjectURL(url);
             }
         }
 
         // アプリケーションを初期化
         const app = new PerfectTextCentering();
-        
-        // デバッグ用：TypeScriptコードをコンソールに出力
-        console.log('TypeScript実装コード:');
-        console.log(app.exportTypeScriptCode());
     </script>
 </body>
 </html>
