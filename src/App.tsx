@@ -11,6 +11,7 @@ interface ImageParameters {
   cornerRadius?: number
   borderColor?: string
   borderWidth?: number
+  authorText?: string
 }
 
 function App() {
@@ -23,7 +24,8 @@ function App() {
     outlineWidth: 5,
     cornerRadius: 30,
     borderColor: '#000000',
-    borderWidth: 8
+    borderWidth: 8,
+    authorText: ''
   })
 
   // Calculate font size automatically if not specified
@@ -42,7 +44,7 @@ function App() {
 
   // Generate SVG content
   const generateSVG = (): string => {
-    const { text, font, fontColor, outlineColor, outlineWidth, cornerRadius, borderColor, borderWidth } = params
+    const { text, font, fontColor, outlineColor, outlineWidth, cornerRadius, borderColor, borderWidth, authorText } = params
     
     return `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -59,10 +61,22 @@ function App() {
         stroke-width: ${outlineWidth || 5};
         paint-order: stroke fill;
       }
+      .author-text {
+        font-family: '${font}', sans-serif;
+        font-size: 32px;
+        font-weight: 400;
+        text-anchor: end;
+        alignment-baseline: baseline;
+        fill: ${fontColor || '#333333'};
+        stroke: ${outlineColor || '#000000'};
+        stroke-width: 2;
+        paint-order: stroke fill;
+      }
     </style>
   </defs>
-  <rect width="1024" height="1024" fill="#FFFFFF" rx="${cornerRadius || 30}" ry="${cornerRadius || 30}" />
-  <text x="512" y="525" class="text-element">${text}</text>
+  <rect width="1024" height="1024" fill="#FFFFFF" rx="${cornerRadius || 30}" ry="${cornerRadius || 30}" stroke="${borderColor || '#000000'}" stroke-width="${borderWidth || 8}" />
+  <text x="512" y="525" class="text-element">${text}</text>${authorText ? `
+  <text x="980" y="980" class="author-text">${authorText}</text>` : ''}
 </svg>`
   }
 
@@ -101,6 +115,18 @@ function App() {
               onChange={(e) => updateParam('text', e.target.value)}
               placeholder="例: 愛 または A"
             />
+          </div>
+
+          <div className="control-group">
+            <label htmlFor="authorText">作者名 (右下に表示):</label>
+            <input
+              id="authorText"
+              type="text"
+              value={params.authorText || ''}
+              onChange={(e) => updateParam('authorText', e.target.value)}
+              placeholder="例: @author"
+            />
+            <small>空欄の場合は表示されません</small>
           </div>
 
           <div className="control-group">
