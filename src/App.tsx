@@ -44,6 +44,11 @@ function App() {
   const generateSVG = (): string => {
     const { text, font, fontColor, outlineColor, outlineWidth, cornerRadius, borderColor, borderWidth } = params
     
+    // Calculate rectangle dimensions accounting for stroke width
+    const strokeWidth = borderWidth || 8
+    const rectSize = 1024 - strokeWidth
+    const rectOffset = strokeWidth / 2
+    
     return `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <style>
@@ -61,7 +66,7 @@ function App() {
       }
     </style>
   </defs>
-  <rect width="1024" height="1024" fill="#FFFFFF" rx="${cornerRadius || 30}" ry="${cornerRadius || 30}" />
+  <rect x="${rectOffset}" y="${rectOffset}" width="${rectSize}" height="${rectSize}" fill="#FFFFFF" rx="${cornerRadius || 30}" ry="${cornerRadius || 30}" stroke="${borderColor || '#000000'}" stroke-width="${strokeWidth}" />
   <text x="512" y="525" class="text-element">${text}</text>
 </svg>`
   }
